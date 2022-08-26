@@ -1,11 +1,15 @@
 package com.ovsyannikov.photogallery
 
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
@@ -23,27 +27,37 @@ class PhotoGalleryFragment : Fragment() {
 
     private lateinit var photoRecyclerView: RecyclerView
     private lateinit var photoGalleryViewModel: PhotoGalleryViewModel
+    private lateinit var thumbnailDownloader: ThumbnailDownloader<PhotoHolder>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        retainInstance = true
+
         photoGalleryViewModel = ViewModelProviders.of(this)[PhotoGalleryViewModel::class.java]
+
+        thumbnailDownloader = ThumbnailDownloader()
+        lifecycle.addObserver(thumbnailDownloader)
     }
 
-    private class PhotoHolder(itemTextView: TextView)
-        : RecyclerView.ViewHolder(itemTextView) {
-            val bindTitle: (CharSequence) -> Unit = itemTextView::setText
+    private class PhotoHolder(itemImageView: ImageView)
+        : RecyclerView.ViewHolder(itemImageView) {
+            val bindDrawable: (Drawable) -> Unit = itemImageView::setImageDrawable
         }
 
-    private class PhotoAdapter(private val galleryItems: List<GalleryItem>)
+    private inner class PhotoAdapter(private val galleryItems: List<GalleryItem>)
         : RecyclerView.Adapter<PhotoHolder>() {
 
         override fun onCreateViewHolder(
             parent: ViewGroup,
             viewType: Int
         ): PhotoHolder {
-            val textView = TextView(parent.context)
-            return PhotoHolder(textView)
+            val view = layoutInflater.inflate(
+                R.layout.list_item_gallery,
+                parent,
+                false
+            ) as ImageView
+                return PhotoHolder(view)
         }
 
         override fun onBindViewHolder(
@@ -51,7 +65,13 @@ class PhotoGalleryFragment : Fragment() {
             position: Int
         ) {
             val galleryItem = galleryItems[position]
-            holder.bindTitle(galleryItem.title)
+            val placeholder: Drawable = ContextCompat.getDrawable(
+                requireContext(),
+                R.drawable.android_tw
+            ) ?: ColorDrawable()
+            holder.bindDrawable(placeholder)
+
+            thumbnailDownloader.queueThumbnail(holder, galleryItem.url)
         }
 
         override fun getItemCount(): Int = galleryItems.size
@@ -78,6 +98,13 @@ class PhotoGalleryFragment : Fragment() {
         ) { galleryItems ->
             photoRecyclerView.adapter = PhotoAdapter(galleryItems)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        lifecycle.removeObserver(
+            thumbnailDownloader
+        )
     }
 
     companion object {
